@@ -9,19 +9,26 @@ func (queue *AviFiles) runConversion() error {
 
 	queue.mtx.Lock()
 
-	queue.setStatus(INPROGRESS)
-
 	args := []string{
 		"-i",
 		queue.inFilepath,
 		queue.outFilename,
 	}
 
+	if queue.getStatus() != YETTOSTART {
+		fmt.Printf("status is %d", queue.getStatus())
+		return nil
+	}
+
+	queue.setStatus(INPROGRESS)
 	cmd := exec.Command("ffmpeg", args...)
-	out, err := cmd.Output()
+	_, err := cmd.Output()
 
 	if err != nil {
-		fmt.Printf("Problem Converting file:%s", queue.getInputFile())
+		fmt.Printf("Problem Converting file:%s, error: %s", queue.getInputFile(), err.Error())
+		queue.setStatus(FAILED)
+	} else {
+		queue.setStatus(DONE)
 	}
 
 	queue.mtx.Unlock()
