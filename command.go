@@ -2,12 +2,15 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
+	"sync"
 )
 
-func (queue *AviFiles) runConversion() error {
+func (queue *AviFiles) runConversion(wg *sync.WaitGroup) error {
+	defer wg.Done()
 
-	queue.mtx.Lock()
+	//queue.mtx.Lock()
 
 	args := []string{
 		"-i",
@@ -15,8 +18,12 @@ func (queue *AviFiles) runConversion() error {
 		queue.outFilename,
 	}
 
+	//defer queue.mtx.Unlock()
+
 	if queue.getStatus() != YETTOSTART {
 		fmt.Printf("status is %d", queue.getStatus())
+		queue.processSignal <- true
+		close(queue.processSignal)
 		return nil
 	}
 
@@ -25,14 +32,14 @@ func (queue *AviFiles) runConversion() error {
 	_, err := cmd.Output()
 
 	if err != nil {
-		fmt.Printf("Problem Converting file:%s, error: %s", queue.getInputFile(), err.Error())
+		log.Printf("\nProblem Converting file:%s, error: %s", queue.getInputFile(), err.Error())
 		queue.setStatus(FAILED)
 	} else {
 		queue.setStatus(DONE)
 	}
 
-	queue.mtx.Unlock()
-
+	queue.processSignal <- true
+	close(queue.processSignal)
 	return nil
 
 }
