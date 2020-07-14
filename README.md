@@ -1,11 +1,12 @@
-# gomediaconverter
+# simpleMediaConverter.
 Go based Media converter:
-Used to convert avi files to mpeg format using ffmpeg utility. Built-in Parallism for concurrent conversion
+Used to convert media files to specified output format. Built-in Parallism for concurrent conversion.
+It uses ffmpeg utility for default which avi to mpeg4 format
 
 ## How to build
 
 ```
-go build ./convertAvi2Mpeg.go ./command.go
+go build ./simpleMediaConverter.go ./avi2Mpeg4Conversion.go
 ```
 
 ## How to Run
@@ -14,11 +15,13 @@ You need to only a mandatory parameter of path to the input folder where the fil
 the conversion is run
 
 ```
-./convertAvi2Mpeg -h
+./simpleMediaConverter. -h
 
-Usage of ./convertAvi2Mpeg:
+Usage of ./simpleMediaConverter:
+  -convert string
+        Convert input files to output format ... eg: avi2mpeg4 (default "avi2mpeg4")
   -dryrun
-        Only list the files to be processed (default false)
+        Only list the files to be processed
   -inputdir string
         The input directory where avi files are stored. All files under this folder will be Recursively processed
   -nofiles uint

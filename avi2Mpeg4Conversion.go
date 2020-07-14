@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-func (queue *AviFiles) runConversion(mode MODE, wg *sync.WaitGroup) error {
+func avi2Mpeg(queue *ProcessingItem, mode MODE, wg *sync.WaitGroup) error {
 	if mode == PARALLEL {
 		defer wg.Done()
 	}
@@ -32,10 +32,11 @@ func (queue *AviFiles) runConversion(mode MODE, wg *sync.WaitGroup) error {
 
 	queue.setStatus(INPROGRESS)
 	cmd := exec.Command("ffmpeg", args...)
-	_, err := cmd.Output()
+	stdouterr, err := cmd.CombinedOutput()
 
 	if err != nil {
 		log.Printf("\nProblem Converting file:%s, error: %s", queue.getInputFile(), err.Error())
+		log.Printf("%s\n\n", string(stdouterr))
 		queue.setStatus(FAILED)
 	} else {
 		queue.setStatus(DONE)

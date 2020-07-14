@@ -43,8 +43,10 @@ const (
 // StatusStringMap is used to create a lookup for status
 var StatusStringMap = map[STATUS]string{YETTOSTART: "NOTSTARTED", INPROGRESS: "INPROGRESS", DONE: "DONE", FAILED: "FAILED"}
 
-// AviFiles is a data structure used for storing information
-type AviFiles struct {
+type convertFunctype func(*ProcessingItem, MODE, *sync.WaitGroup) error
+
+// ProcessingItem is a data structure used for storing information
+type ProcessingItem struct {
 	inFilepath      string
 	outFilename     string
 	outputDir       string
@@ -53,73 +55,139 @@ type AviFiles struct {
 	mtx             sync.Mutex
 	processSignal   chan bool
 	printStatusOnce bool
+	convert         convertFunctype
 }
 
+var conversionFuncMap = map[CONVERSIONTYPE]convertFunctype{AVI2MPEG4: avi2Mpeg}
+
 // ProcessingQueue is a Global var for storing all structures of files to be processed
-var ProcessingQueue = []*AviFiles{}
+var ProcessingQueue = []*ProcessingItem{}
+
+// CONVERSIONTYPE is a type that lists allowed conversion type from input to output file format
+type CONVERSIONTYPE uint
+
+// CONVERSIONS formats
+const (
+	// Different file formats
+	NOTDEFINED CONVERSIONTYPE = 0
+	AVI2MPEG4  CONVERSIONTYPE = 10
+)
+
+type extensions struct {
+	inext  string
+	outext string
+}
+
+var inputOutFileExtMap = map[CONVERSIONTYPE]extensions{AVI2MPEG4: {inext: ".avi", outext: ".mp4"}}
+
+var conversionformat CONVERSIONTYPE = NOTDEFINED
 
 func exit(message string, code int) {
 	fmt.Println(message)
 	os.Exit(code)
 }
 
-func (queueItem *AviFiles) getInputFile() string {
+func (queueItem *ProcessingItem) getInputFile() string {
 	return queueItem.inFilepath
 }
 
-func (queueItem *AviFiles) getStatus() STATUS {
+func (queueItem *ProcessingItem) getStatus() STATUS {
 	return queueItem.status
 }
 
-func (queueItem *AviFiles) setStatus(state STATUS) {
+func (queueItem *ProcessingItem) setStatus(state STATUS) {
 	queueItem.status = state
 }
 
-func getOutFilename(inFilePath string) string {
+func getOutFilename(inFilePath string) (string, error) {
 	ext := filepath.Ext(inFilePath)
 	outfname := inFilePath[0 : len(inFilePath)-len(ext)]
 
 	if len(outfname) == 0 {
-		log.Printf("outfilename could be determined\n")
+		log.Printf("outfilename could not be determined\n")
+		return "", fmt.Errorf("Could determine output file format")
 	}
 
-	outfname = outfname + ".mp4"
-	return outfname
+	var outext string = ""
+	if conversionformat == AVI2MPEG4 {
+		outext = inputOutFileExtMap[AVI2MPEG4].outext
+	}
+
+	if len(outext) > 0 {
+		outfname = outfname + outext
+	} else {
+		return "", fmt.Errorf("Could not determine output file format")
+	}
+
+	return outfname, nil
 }
 
-func getOutputDir(inFilePath string) string {
+func getOutputDir(inFilePath string) (string, error) {
 	outputDir := filepath.Dir(inFilePath)
 
 	if len(outputDir) > 0 {
-		return outputDir
+		return outputDir, nil
 	}
 
-	return outputDir
+	return outputDir, fmt.Errorf("Could not determine output directory")
 }
 
 func mediawalk(path string, info os.FileInfo, err error) error {
-	var aviobj *AviFiles
+	var fileobj *ProcessingItem
 
-	if !info.IsDir() && strings.HasSuffix(info.Name(), "avi") {
+	var inputfileext string = ""
+	if conversionformat != NOTDEFINED {
+		if conversionformat == AVI2MPEG4 {
+			inputfileext = inputOutFileExtMap[AVI2MPEG4].inext
+		}
+	}
+	if len(inputfileext) <= 0 {
+		return fmt.Errorf("Could not determine input file extension")
+	}
+
+	if !info.IsDir() && strings.HasSuffix(info.Name(), inputfileext) {
+
+		outfilename, err := getOutFilename(path)
+		if err != nil {
+			return err
+		}
+
+		outdir, err := getOutputDir(path)
+		if err != nil {
+			return err
+		}
 
 		count++
-
-		aviobj = &AviFiles{
+		fileobj = &ProcessingItem{
 			inFilepath:      path,
-			outFilename:     getOutFilename(path),
-			outputDir:       getOutputDir(path),
+			outFilename:     outfilename,
+			outputDir:       outdir,
 			no:              count,
 			status:          YETTOSTART,
 			processSignal:   make(chan bool),
 			printStatusOnce: false,
+			convert:         conversionFuncMap[conversionformat],
 		}
 
-		log.Printf("aviobj: inFilepath: %s, outFilename: %s, outputDir: %s, no: %d\n\n",
-			aviobj.inFilepath, aviobj.outFilename, aviobj.outputDir, aviobj.no)
+		log.Printf("fileobj: inFilepath: %s, outFilename: %s, outputDir: %s, no: %d\n\n",
+			fileobj.inFilepath, fileobj.outFilename, fileobj.outputDir, fileobj.no)
 	}
 
-	if aviobj != nil {
-		ProcessingQueue = append(ProcessingQueue, aviobj)
+	if fileobj != nil {
+		ProcessingQueue = append(ProcessingQueue, fileobj)
+	}
+
+	return nil
+}
+
+func parseAndProcessConversion(convert string) error {
+	if convert == "avi2mpeg4" {
+		conversionformat = AVI2MPEG4
+		return nil
+	}
+
+	if conversionformat == NOTDEFINED {
+		return fmt.Errorf("No valid conversion theme could be parsed")
 	}
 
 	return nil
@@ -127,7 +195,7 @@ func mediawalk(path string, info os.FileInfo, err error) error {
 
 func main() {
 	// Set log file
-	logFile, err := os.OpenFile("gomediacomverter.log", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile("simplemediaconverter.log", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Printf("\nFailed to create logfile, error: %s\n", err.Error())
 	}
@@ -142,10 +210,15 @@ func main() {
 	noFiles := flag.Uint("nofiles", DEFAULTNOFILES, "no of files to process simulatenosuly")
 	serialMode := flag.Bool("serial", true, "All files to be processed serially")
 	parallelMode := flag.Bool("parallel", false, "All files to be processed simulatenosuly")
+	convert := flag.String("convert", "avi2mpeg4", "Convert input files to output format ... eg: avi2mpeg4")
 
 	flag.Parse()
 
 	// validate flags
+	if err = parseAndProcessConversion(*convert); err != nil {
+		exit(err.Error(), 6)
+	}
+
 	if *inputDir == "" {
 		log.Printf("Missing input Directory arg")
 		exit("Missing input Directory arg", -1)
@@ -171,7 +244,9 @@ func main() {
 		fmt.Println("Running in parallel mode")
 	}
 
-	filepath.Walk(*inputDir, mediawalk)
+	if err = filepath.Walk(*inputDir, mediawalk); err != nil {
+		exit(err.Error(), 10)
+	}
 
 	if count == 0 {
 		exit("There are no files to be processed", 0)
@@ -192,7 +267,7 @@ func main() {
 	}
 
 	fmt.Println("*************************************")
-	fmt.Println(" Eligible Avi Files to be Processed")
+	fmt.Println(" Eligible input Files to be Processed")
 	fmt.Println("************************************")
 	for j := range ProcessingQueue {
 		fmt.Printf("%s\n", ProcessingQueue[j].inFilepath)
@@ -211,9 +286,9 @@ func main() {
 	for i := uint(0); i < *noFiles; i++ {
 		if *parallelMode {
 			wg.Add(1)
-			go ProcessingQueue[i].runConversion(PARALLEL, &wg)
+			go ProcessingQueue[i].convert(ProcessingQueue[i], PARALLEL, &wg)
 		} else {
-			ProcessingQueue[i].runConversion(SERIAL, &wg)
+			ProcessingQueue[i].convert(ProcessingQueue[i], SERIAL, &wg)
 			fmt.Printf("(%d/%d). %s\t ...... [%s]\n", ProcessingQueue[i].no, count, ProcessingQueue[i].inFilepath, StatusStringMap[ProcessingQueue[i].status])
 		}
 	}
