@@ -18,11 +18,15 @@ the conversion is run
 
 Usage of ./convertAvi2Mpeg:
   -dryrun
-        Only list the files to be processed
+        Only list the files to be processed (default false)
   -inputdir string
         The input directory where avi files are stored. All files under this folder will be Recursively processed
   -nofiles uint
         no of files to process simulatenosuly (default 20)
+  -parallel
+        All files to be processed simulatenosuly
+  -serial
+        All files to be processed serially (default true)
 
 ```
 

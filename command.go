@@ -7,10 +7,13 @@ import (
 	"sync"
 )
 
-func (queue *AviFiles) runConversion(wg *sync.WaitGroup) error {
-	defer wg.Done()
+func (queue *AviFiles) runConversion(mode MODE, wg *sync.WaitGroup) error {
+	if mode == PARALLEL {
+		defer wg.Done()
+	}
 
-	//queue.mtx.Lock()
+	queue.mtx.Lock()
+	defer queue.mtx.Unlock()
 
 	args := []string{
 		"-i",
@@ -18,12 +21,12 @@ func (queue *AviFiles) runConversion(wg *sync.WaitGroup) error {
 		queue.outFilename,
 	}
 
-	//defer queue.mtx.Unlock()
-
 	if queue.getStatus() != YETTOSTART {
 		fmt.Printf("status is %d", queue.getStatus())
-		queue.processSignal <- true
-		close(queue.processSignal)
+		if mode == PARALLEL {
+			queue.processSignal <- true
+			close(queue.processSignal)
+		}
 		return nil
 	}
 
@@ -38,8 +41,11 @@ func (queue *AviFiles) runConversion(wg *sync.WaitGroup) error {
 		queue.setStatus(DONE)
 	}
 
-	queue.processSignal <- true
-	close(queue.processSignal)
+	if mode == PARALLEL {
+		queue.processSignal <- true
+		close(queue.processSignal)
+	}
+
 	return nil
 
 }
