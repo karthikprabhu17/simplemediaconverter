@@ -1,12 +1,31 @@
 # simpleMediaConverter.
 Go based Media converter:
 Used to convert media files to specified output format. Built-in Parallism for concurrent conversion.
-It uses ffmpeg utility for default which avi to mpeg4 format
 
-## How to build
+Default: It uses ffmpeg utility by default which converts avi to mpeg4 format. But this can be scaled to by writing any
+conversion function
+
+## Pre-requisities
+ - Make sure you have go installed
+ - The conversion utility like ffmpeg for avi to mpeg conversion
+
+## How to build & Install
+
+### Build
+```
+make build
+```
+
+### Install & Uninstall
+
+It installs the binary in `GOPATH/bin` pointed by go env
 
 ```
-go build ./simpleMediaConverter.go ./avi2Mpeg4Conversion.go
+make install
+```
+
+```
+make uninstall
 ```
 
 ## How to Run
@@ -15,7 +34,7 @@ You need to only a mandatory parameter of path to the input folder where the fil
 the conversion is run
 
 ```
-./simpleMediaConverter. -h
+simpleMediaConverter. -h
 
 Usage of ./simpleMediaConverter:
   -convert string
@@ -32,6 +51,20 @@ Usage of ./simpleMediaConverter:
         All files to be processed serially (default true)
 
 ```
+
+You might need to run with sudo user priviliges if you dont have permissions on the mount directory in some cases attaching an external hard disk
+
+## Troubleshooting
+
+If it builds & installs fine and you still cant access the binary from your directory, then it could be because your GOPATH is not in PATH. Make sure to include the below in your `.bashrc`, `.bash_profile` or `.zshrc`
+
+```
+export PATH=$PATH:$(go env GOPATH)/bin
+```
+
+## Suggestions
+Suggestions, PRs & Issues are welcome.
+
 
 ## Disclaimer
 
