@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+type medianotifier interface {
+	//sendmessage()
+	connect() error
+	notifyMessage(string) error
+	prepareClient()
+	disConnect() error
+}
+
 // Counter
 var count uint = 0
 var processedCount uint = 0
@@ -193,6 +201,21 @@ func parseAndProcessConversion(convert string) error {
 	return nil
 }
 
+func getNotifierClient(notifier string) medianotifier {
+	var cli medianotifier = nil
+	switch notifier {
+	case "irc":
+		cli = &ircclient{irc: nil}
+		cli.prepareClient()
+	case "slack":
+		cli = &slackclient{httpclient: nil}
+		cli.prepareClient()
+	}
+
+	return cli
+
+}
+
 func main() {
 	// Set log file
 	logFile, err := os.OpenFile("simplemediaconverter.log", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
@@ -211,6 +234,7 @@ func main() {
 	serialMode := flag.Bool("serial", true, "All files to be processed serially")
 	parallelMode := flag.Bool("parallel", false, "All files to be processed simulatenosuly")
 	convert := flag.String("convert", "avi2mpeg4", "Convert input files to output format ... eg: avi2mpeg4")
+	notify := flag.String("notify", "", "notify about progress through messaging platform")
 
 	flag.Parse()
 
@@ -239,13 +263,36 @@ func main() {
 	}
 
 	if *serialMode {
-		fmt.Println("Running in serial mode")
+		fmt.Println("\nRunning in serial mode")
 	} else {
-		fmt.Println("Running in parallel mode")
+		fmt.Println("\nRunning in parallel mode")
+	}
+
+	var client medianotifier = nil
+	if len(*notify) == 0 {
+		fmt.Println("Notifaction via messaging platform not enabled")
+	} else {
+		fmt.Printf("Progress will be notified by %s\n", *notify)
+
+		switch *notify {
+		case "irc":
+			client = getNotifierClient("irc")
+		case "slack":
+			client = getNotifierClient("slack")
+		}
+
+		defer client.disConnect()
 	}
 
 	if err = filepath.Walk(*inputDir, mediawalk); err != nil {
 		exit(err.Error(), 10)
+	}
+
+	fmt.Println("*************************************")
+	fmt.Println(" Eligible input Files to be Processed")
+	fmt.Println("************************************")
+	for j := range ProcessingQueue {
+		fmt.Printf("%s\n", ProcessingQueue[j].inFilepath)
 	}
 
 	if count == 0 {
@@ -266,13 +313,6 @@ func main() {
 		fmt.Printf("\n%s will be processed\n", noFilesMessage)
 	}
 
-	fmt.Println("*************************************")
-	fmt.Println(" Eligible input Files to be Processed")
-	fmt.Println("************************************")
-	for j := range ProcessingQueue {
-		fmt.Printf("%s\n", ProcessingQueue[j].inFilepath)
-	}
-
 	if *dryRun {
 		exit("", 0)
 	}
@@ -289,7 +329,13 @@ func main() {
 			go ProcessingQueue[i].convert(ProcessingQueue[i], PARALLEL, &wg)
 		} else {
 			ProcessingQueue[i].convert(ProcessingQueue[i], SERIAL, &wg)
-			fmt.Printf("(%d/%d). %s\t ...... [%s]\n", ProcessingQueue[i].no, count, ProcessingQueue[i].inFilepath, StatusStringMap[ProcessingQueue[i].status])
+			message := fmt.Sprintf("(%d/%d). %s\t ...... [%s]\n", ProcessingQueue[i].no, count, ProcessingQueue[i].inFilepath, StatusStringMap[ProcessingQueue[i].status])
+			fmt.Printf(message)
+
+			if len(*notify) > 0 && client != nil {
+				client.notifyMessage(message)
+			}
+
 		}
 	}
 
@@ -301,9 +347,15 @@ func main() {
 				case <-ProcessingQueue[i].processSignal:
 					countmtx.Lock()
 					if !ProcessingQueue[i].printStatusOnce {
-						fmt.Printf("(%d/%d). %s\t ...... [%s]\n", ProcessingQueue[i].no, count, ProcessingQueue[i].inFilepath, StatusStringMap[ProcessingQueue[i].status])
+						message := fmt.Sprintf("(%d/%d). %s\t ...... [%s]\n", ProcessingQueue[i].no, count, ProcessingQueue[i].inFilepath, StatusStringMap[ProcessingQueue[i].status])
+						fmt.Printf(message)
 						ProcessingQueue[i].printStatusOnce = true
 						processedCount++
+
+						if len(*notify) > 0 && client != nil {
+							client.notifyMessage(message)
+						}
+
 					}
 					countmtx.Unlock()
 				case <-time.After(30 * time.Second):

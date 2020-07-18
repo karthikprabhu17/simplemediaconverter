@@ -1,9 +1,10 @@
 # simpleMediaConverter.
-Go based Media converter:
-Used to convert media files to specified output format. Built-in Parallism for concurrent conversion.
+
+Mass Media converter used to convert media files to specified output format. Built-in Parallism for concurrent conversion and 
+support for slack integration for updates
 
 Default: It uses ffmpeg utility by default which converts avi to mpeg4 format. But this can be scaled to by writing any
-conversion function
+conversion function : avi to mkv etc
 
 ## Pre-requisities
  - Make sure you have go installed
@@ -52,6 +53,21 @@ Usage of ./simpleMediaConverter:
 
 ```
 
+### Dry Run
+```
+simplemediaconverter -inputdir /PATH/TO/INPUTFOLDER -dryrun
+```
+
+### Actual Run with slack notificaitions
+```
+simplemediaconverter -inputdir /PATH/TO/INPUTFOLDER -nofiles=10 -notify=slack
+```
+
+### Actual Run for avi2mpeg(default) in parallel
+```
+simplemediaconverter -inputdir /PATH/TO/INPUTFOLDER -nofiles=10 -convert=avi2mpeg -parallel -notify=slack
+```
+
 You might need to run with sudo user priviliges if you dont have permissions on the mount directory in some cases attaching an external hard disk
 
 ## Troubleshooting
@@ -61,6 +77,8 @@ If it builds & installs fine and you still cant access the binary from your dire
 ```
 export PATH=$PATH:$(go env GOPATH)/bin
 ```
+
+Fails from notifiers are soft fails and wont break conversion as such
 
 ## Suggestions
 Suggestions, PRs & Issues are welcome.
